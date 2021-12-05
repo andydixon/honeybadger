@@ -1,13 +1,10 @@
 mod randomgenerator;
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 use getopts::Options;
-use std::env;
-use std::io::Read;
+use std::{thread, time::Duration, env, io::Read, str::FromStr};
+use reqwest::IntoUrl;
 use scraper::{Html, Selector};
-use std::str::FromStr;
-use reqwest::header::UserAgent;
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -25,8 +22,6 @@ fn main() {
 
     let url = matches.opt_str("u");
 
-    let num: Option<String> = matches.opt_str("n");
-
     let delay: i32 = match matches.opt_str("d") {
         Some(_) => FromStr::from_str(&matches.opt_str("d").unwrap()).unwrap(),
         None => 500
@@ -40,87 +35,85 @@ fn main() {
 
     match url {
         Some(_) => {
-            process_page(url.unwrap(), delay, num);
+            process_page(&url.unwrap(), delay, num);
         }
         None => {
             print_usage(&program, opts);
-            process_page("http://www.andydixon.com/form.html".to_string(), delay, num);
+            process_page(&"http://www.andydixon.com/form.html".to_string(), delay, num);
         }
     }
 }
 
-fn process_page(url: String, delay: i32, num: i32) {
+fn process_page(url: &String, delay: i32, num: i32) {
     let mut res = reqwest::blocking::get(url).unwrap();
     let mut body = String::new();
-    let mut loop_count: i32 = 0;
     res.read_to_string(&mut body);
     let fragment = Html::parse_fragment(&body);
     let form_selector = Selector::parse("form").unwrap();
     let input_selector = Selector::parse("input").unwrap();
     let select_selector = Selector::parse("select").unwrap();
-    let option_selector = Selector::parse("option").unwrap();
+    let mut params: HashMap<String, String> = HashMap::new();
+    let mut hidden_params: HashMap<String, String> = HashMap::new();
 
     for form in fragment.select(&form_selector) {
-        let mut params = HashMap::new();
-
+        print!("A");
         println!("Hitting target {}", form.value().attr("action").unwrap());
-
+        print!("B");
         for element in form.select(&input_selector) {
-
-            // If the form element is hidden, this may contain some verification shiz, so lets not mangle it!
             if element.value().attr("type").unwrap() == "hidden" {
-                params.insert(element.value().attr("name").unwrap(), element.value().attr("value").unwrap());
-            } else if element.value().attr("name").unwrap() == "user" ||
-                element.value().attr("name").unwrap() == "username" ||
-                element.value().attr("name").unwrap() == "user_name" ||
-                element.value().attr("name").unwrap() == "uname" ||
-                element.value().attr("name").unwrap() == "email" ||
-                element.value().attr("name").unwrap() == "em" ||
-                element.value().attr("name").unwrap() == "e" ||
-                element.value().attr("name").unwrap() == "u" ||
-                element.value().attr("name").unwrap() == "login" {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_email());
-            } else if element.value().attr("name").unwrap() == "pass" ||
-                element.value().attr("name").unwrap() == "pword" ||
-                element.value().attr("name").unwrap() == "pw" {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_bollocks(8));
-            } else if element.value().attr("name").unwrap() == "name" {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_name());
-            } else if element.value().attr("name").unwrap() == "name1" ||
-                element.value().attr("name").unwrap() == "firstname" ||
-                element.value().attr("name").unwrap() == "fname" ||
-                element.value().attr("name").unwrap() == "first_name"
-            {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_firstname());
-            } else if element.value().attr("name").unwrap() == "name2" ||
-                element.value().attr("name").unwrap() == "lastname" ||
-                element.value().attr("name").unwrap() == "lname" ||
-                element.value().attr("name").unwrap() == "last_name" ||
-                element.value().attr("name").unwrap() == "surname"
-            {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_lastname());
+                hidden_params.insert(element.value().attr("name").unwrap().to_string(), element.value().attr("value").unwrap().to_string());
             } else {
-                params.insert(element.value().attr("name").unwrap(), &randomgenerator::generate_bolllocks());
+                params.insert(element.value().attr("name").unwrap().to_string(), "".to_string());
             }
         }
+
         for element in form.select(&select_selector) {
-            println!("{} is a select with the following options:", element.value().attr("name").unwrap());
-            for option in element.select(&option_selector) {
-                print!("{}\t", option.value().attr("value").unwrap());
-            }
-            println!();
+            params.insert(element.value().attr("name").unwrap().to_string(), "".to_string());
         }
+        print!("X");
+        let mut request_params: HashMap<String, String> = HashMap::new();
+        for _ in 0..num {
+            print!("Y");
+            for (key, _) in &params {
+                if key == "user" || key == "username" || key == "user_name" || key == "uname" || key == "email" || key == "em" || key == "e" || key == "u" || key == "login" {
+                    request_params.insert(key.to_string(), randomgenerator::generate_email().to_string());
+                } else if key == "pass" || key == "pword" || key == "pw" {
+                    request_params.insert(key.to_string(), randomgenerator::generate_bollocks(8));
+                } else if key == "name" {
+                    request_params.insert(key.to_string(), randomgenerator::generate_name());
+                } else if key == "name1" || key == "firstname" || key == "fname" || key == "first_name" {
+                    request_params.insert(key.to_string(), randomgenerator::get_random_firstname());
+                } else if key == "name2" || key == "lastname" || key == "lname" || key == "last_name" || key == "surname" {
+                    request_params.insert(key.to_string(), randomgenerator::get_random_lastname());
+                } else {
+                    request_params.insert(key.to_string(), randomgenerator::generate_bollocks(randomgenerator::generate_random_i8() as i32));
+                }
+            }
+            print!("Y");
+            // Append hidden options
+            for (key, value) in &hidden_params {
+                request_params.insert(key.to_string(), value.to_string());
+            }
 
-        /**
-        Do the needful here to send the request
-        **/
+            /**
+            Do the needful here to send the request
+            **/
 
-        let client = reqwest::Client::new().unwrap();
-        client.post("http://httpbin.org")
-            .header(UserAgent(&randomgenerator::get_random_useragent()))
-            .form(&params)
-            .send();
-    }
+            let client = reqwest::blocking::Client::new();
+            let res = client.post(&url.to_string())
+                .header("User-Agent", &randomgenerator::get_random_useragent())
+                .form(&request_params)
+                .send();
+            match res {
+                Ok(res) => println!("Response: {}", res.status()),
+                Err(err) => println!("Error: {}", err)
+            }
+            println!("Clearing Params");
+            request_params.clear();
+            thread::sleep(Duration::from_millis(delay as u64));
+            println!("End of loop");
+        } // form attack loop
+    } // Form selector
 }
 
 fn print_usage(program: &str, opts: Options) {
