@@ -4,7 +4,7 @@ use std::{collections::HashMap};
 use getopts::Options;
 use std::{thread, time::Duration, env, io::Read, str::FromStr};
 use reqwest::IntoUrl;
-use scraper::{Html, Selector};
+use crabquery::{Document, Element};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -47,28 +47,26 @@ fn main() {
 fn process_page(url: &String, delay: i32, num: i32) {
     let mut res = reqwest::blocking::get(url).unwrap();
     let mut body = String::new();
-    res.read_to_string(&mut body);
-    let fragment = Html::parse_fragment(&body);
-    let form_selector = Selector::parse("form").unwrap();
-    let input_selector = Selector::parse("input").unwrap();
-    let select_selector = Selector::parse("select").unwrap();
     let mut params: HashMap<String, String> = HashMap::new();
     let mut hidden_params: HashMap<String, String> = HashMap::new();
+    let mut rng = rand::thread_rng();
+    res.read_to_string(&mut body);
 
-    for form in fragment.select(&form_selector) {
-        print!("A");
-        println!("Hitting target {}", form.value().attr("action").unwrap());
-        print!("B");
-        for element in form.select(&input_selector) {
-            if element.value().attr("type").unwrap() == "hidden" {
-                hidden_params.insert(element.value().attr("name").unwrap().to_string(), element.value().attr("value").unwrap().to_string());
+    let doc = Document::from(body.to_string());
+    let forms = doc.select("form");
+
+    for form in forms {
+        println!("Hitting target {}", form.attr("action").unwrap());
+        for element in form.select("input") {
+            if element.attr("type").unwrap() == "hidden" {
+                hidden_params.insert(element.attr("name").unwrap().to_string(), element.attr("value").unwrap().to_string());
             } else {
-                params.insert(element.value().attr("name").unwrap().to_string(), "".to_string());
+                params.insert(element.attr("name").unwrap().to_string(), "".to_string());
             }
         }
 
-        for element in form.select(&select_selector) {
-            params.insert(element.value().attr("name").unwrap().to_string(), "".to_string());
+        for element in form.select("select") {
+            params.insert(element.attr("name").unwrap().to_string(), "".to_string());
         }
         print!("X");
         let mut request_params: HashMap<String, String> = HashMap::new();
