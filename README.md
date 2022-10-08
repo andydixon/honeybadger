@@ -1,6 +1,6 @@
 # honeybadger
 
-Flood a form with fake information designed for phishing sites to dilute down any legitimate submissions
+Flood a form with fake information designed for phishing sites to dilute down any legitimate submissions. Also my first project in Rust
 
 ## Doing the buildful
 
