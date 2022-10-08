@@ -3,8 +3,9 @@ mod randomgenerator;
 use std::{collections::HashMap};
 use getopts::Options;
 use std::{thread, time::Duration, env, io::Read, str::FromStr};
-use reqwest::IntoUrl;
 use crabquery::{Document, Element};
+use url::{Url};
+use std::io::{self, Write};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,84 +33,139 @@ fn main() {
         None => 1000
     };
 
-
     match url {
         Some(_) => {
             process_page(&url.unwrap(), delay, num);
         }
         None => {
             print_usage(&program, opts);
-            process_page(&"http://www.andydixon.com/form.html".to_string(), delay, num);
         }
     }
 }
 
 fn process_page(url: &String, delay: i32, num: i32) {
-    let mut res = reqwest::blocking::get(url).unwrap();
-    let mut body = String::new();
+    let mut formTargetUrl: String;
     let mut params: HashMap<String, String> = HashMap::new();
     let mut hidden_params: HashMap<String, String> = HashMap::new();
-    let mut rng = rand::thread_rng();
+    let mut request_params: HashMap<String, String> = HashMap::new();
+    let mut body = String::new();
+
+    // Read page contents
+    let mut res = reqwest::blocking::get(url).unwrap();
     res.read_to_string(&mut body);
 
     let doc = Document::from(body.to_string());
     let forms = doc.select("form");
+    let mut inputs: Vec<Element>;
+    let mut selects: Vec<Element>;
+    let mut formNum: i32 = 0;
 
-    for form in forms {
-        println!("Hitting target {}", form.attr("action").unwrap());
-        for element in form.select("input") {
-            if element.attr("type").unwrap() == "hidden" {
-                hidden_params.insert(element.attr("name").unwrap().to_string(), element.attr("value").unwrap().to_string());
-            } else {
-                params.insert(element.attr("name").unwrap().to_string(), "".to_string());
+    for form in &forms {
+        
+        formNum = formNum+1;
+
+        // Work out what the form target should be
+        match generate_target_url(url.clone(),form.attr("action").unwrap()) {
+            Some(target) => {
+                formTargetUrl = target;
+            }
+            _ => { // Catch any problems, and assume that the form is hitting itself
+                formTargetUrl = url.clone();
             }
         }
+        println!("Form {}/{} - Computed target {}",formNum,forms.len(), formTargetUrl);
 
-        for element in form.select("select") {
-            params.insert(element.attr("name").unwrap().to_string(), "".to_string());
+        // Get form components
+        inputs = form.select("input");
+        selects = form.select("select");
+        println!("Found {} input fields and {} select fields",inputs.len(),selects.len());
+
+        // Loop through input elements and parse into param arrays
+        for element in inputs{
+            if element.attr("type").unwrap() == "hidden" {
+                match element.attr("name") {
+                    Some(_) => {
+                        match element.attr("value") {
+                            Some(_) => {
+                                hidden_params.insert(element.attr("name").unwrap().to_string(), element.attr("value").unwrap().to_string());
+                            }
+                            None => {
+                                hidden_params.insert(element.attr("name").unwrap().to_string(), "".to_string());
+                            }
+                        }
+                    }
+                    None => {
+                        println!("Ignoring hidden field with no name");
+                    }
+                }
+
+            } else {
+
+                match element.attr("name") {
+                    Some(_) => {
+                        match element.attr("value") {
+                            Some(_) => {
+                                params.insert(element.attr("name").unwrap().to_string(), element.attr("value").unwrap().to_string());
+                            }
+                            None => {
+                                params.insert(element.attr("name").unwrap().to_string(), "".to_string());
+                            }
+                        }
+                    }
+                    None => {
+                        // This would be for crap like submit buttons
+                        params.insert(element.attr("type").unwrap().to_string(), element.attr("type").unwrap().to_string());
+                    }
+               }
+            }
         }
-        print!("X");
-        let mut request_params: HashMap<String, String> = HashMap::new();
-        for _ in 0..num {
-            print!("Y");
-            for (key, _) in &params {
-                if key == "user" || key == "username" || key == "user_name" || key == "uname" || key == "email" || key == "em" || key == "e" || key == "u" || key == "login" {
-                    request_params.insert(key.to_string(), randomgenerator::generate_email().to_string());
-                } else if key == "pass" || key == "pword" || key == "pw" {
-                    request_params.insert(key.to_string(), randomgenerator::generate_bollocks(8));
-                } else if key == "name" {
-                    request_params.insert(key.to_string(), randomgenerator::generate_name());
-                } else if key == "name1" || key == "firstname" || key == "fname" || key == "first_name" {
-                    request_params.insert(key.to_string(), randomgenerator::get_random_firstname());
-                } else if key == "name2" || key == "lastname" || key == "lname" || key == "last_name" || key == "surname" {
-                    request_params.insert(key.to_string(), randomgenerator::get_random_lastname());
+    
+        // Hit the form target "num" times
+        for hitnum in 0..num {
+
+            // Build up form request, where visibile fields are blank, generate random information
+            request_params = HashMap::new();
+            for (key, value) in &params {
+                if value == "" {
+                    if key == "user" || key == "username" || key == "user_name" || key == "uname" || key == "email" || key == "em" || key == "e" || key == "u" || key == "login" {
+                        request_params.insert(key.to_string(), randomgenerator::generate_email().to_string());
+                    } else if key == "pass" || key == "pword" || key == "pw" {
+                        request_params.insert(key.to_string(), randomgenerator::generate_bollocks(8));
+                    } else if key == "name" {
+                        request_params.insert(key.to_string(), randomgenerator::generate_name());
+                    } else if key == "name1" || key == "firstname" || key == "fname" || key == "first_name" {
+                        request_params.insert(key.to_string(), randomgenerator::get_random_firstname());
+                    } else if key == "name2" || key == "lastname" || key == "lname" || key == "last_name" || key == "surname" {
+                        request_params.insert(key.to_string(), randomgenerator::get_random_lastname());
+                    } else {
+                        request_params.insert(key.to_string(), randomgenerator::generate_bollocks(randomgenerator::generate_random()));
+                    }
                 } else {
-                    request_params.insert(key.to_string(), randomgenerator::generate_bollocks(randomgenerator::generate_random_i8() as i32));
+                    // There was pre-existing data. Use that as not to arouse suspicion
+                    request_params.insert(key.to_string(), value.to_string());
                 }
             }
-            print!("Y");
+
             // Append hidden options
             for (key, value) in &hidden_params {
                 request_params.insert(key.to_string(), value.to_string());
             }
 
-            /**
-            Do the needful here to send the request
-            **/
-
+            // Do the needful here to send the request
             let client = reqwest::blocking::Client::new();
-            let res = client.post(&url.to_string())
+            let res = client.post(&formTargetUrl)
                 .header("User-Agent", &randomgenerator::get_random_useragent())
                 .form(&request_params)
                 .send();
             match res {
-                Ok(res) => println!("Response: {}", res.status()),
-                Err(err) => println!("Error: {}", err)
+                Ok(res) => print!("\rHit {} - Response: {}\u{001b}[0K", hitnum+1,res.status()),
+                Err(err) => print!("\rHit {} - Error: {}\u{001b}[0K", hitnum+1,err)
             }
-            println!("Clearing Params");
+            io::stdout().flush().expect("flush failed.");
+
+            // Clear the request params ready for the next iteration, and sleep based on predefined args
             request_params.clear();
             thread::sleep(Duration::from_millis(delay as u64));
-            println!("End of loop");
         } // form attack loop
     } // Form selector
 }
@@ -117,4 +173,32 @@ fn process_page(url: &String, delay: i32, num: i32) {
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
+}
+
+
+fn generate_target_url(url: String,target : String) -> Option<String>{
+
+    // Generate target URL based on url if target is not already a full URL
+
+    match Url::parse(&target) {
+        Ok(_) => {Some(target)}
+        Err(_) => {
+            match Url::parse(&url) {
+                Ok(uc) => {
+                    match uc.join(&target) {
+                        Ok(retval) => {
+                            Some(retval.as_str().to_string())
+                        }
+                        _ => None
+                        
+                    }
+                }
+                Err(_) => None
+            }
+        }
+    }
+
+
+    
+
 }
