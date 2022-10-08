@@ -1,3 +1,22 @@
+/*
+ honeybadger: Phishing Site data flooder
+
+    Copyright (C) 2022-2023 Andy Dixon
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 mod randomgenerator;
 
 use std::{collections::HashMap};
@@ -18,7 +37,7 @@ fn main() {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
+        Err(f) => { panic!("{}",f.to_string()) }
     };
 
     let url = matches.opt_str("u");
@@ -44,7 +63,7 @@ fn main() {
 }
 
 fn process_page(url: &String, delay: i32, num: i32) {
-    let mut formTargetUrl: String;
+    let mut form_target_url: String;
     let mut params: HashMap<String, String> = HashMap::new();
     let mut hidden_params: HashMap<String, String> = HashMap::new();
     let mut request_params: HashMap<String, String> = HashMap::new();
@@ -58,22 +77,22 @@ fn process_page(url: &String, delay: i32, num: i32) {
     let forms = doc.select("form");
     let mut inputs: Vec<Element>;
     let mut selects: Vec<Element>;
-    let mut formNum: i32 = 0;
+    let mut form_num: i32 = 0;
 
     for form in &forms {
         
-        formNum = formNum+1;
+        form_num = form_num+1;
 
         // Work out what the form target should be
         match generate_target_url(url.clone(),form.attr("action").unwrap()) {
             Some(target) => {
-                formTargetUrl = target;
+                form_target_url = target;
             }
             _ => { // Catch any problems, and assume that the form is hitting itself
-                formTargetUrl = url.clone();
+                form_target_url = url.clone();
             }
         }
-        println!("Form {}/{} - Computed target {}",formNum,forms.len(), formTargetUrl);
+        println!("Form {}/{} - Computed target {}",form_num,forms.len(), form_target_url);
 
         // Get form components
         inputs = form.select("input");
@@ -153,7 +172,7 @@ fn process_page(url: &String, delay: i32, num: i32) {
 
             // Do the needful here to send the request
             let client = reqwest::blocking::Client::new();
-            let res = client.post(&formTargetUrl)
+            let res = client.post(&form_target_url)
                 .header("User-Agent", &randomgenerator::get_random_useragent())
                 .form(&request_params)
                 .send();
