@@ -5,7 +5,9 @@ Flood a form with fake information designed for phishing sites to dilute down an
 ## Doing the buildful
 
 `git clone git@github.com:andydixon/honeybadger.git honeybadger`
+
 `cd honeybadger`
+
 `cargo build`
 
 ## Doing the runful
