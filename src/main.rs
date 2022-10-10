@@ -148,7 +148,7 @@ fn process_page(url: &String, delay: i32, num: i32) {
                 if value == "" {
                     if key == "user" || key == "username" || key == "user_name" || key == "uname" || key == "email" || key == "em" || key == "e" || key == "u" || key == "login" {
                         request_params.insert(key.to_string(), randomgenerator::generate_email().to_string());
-                    } else if key == "pass" || key == "pword" || key == "pw" {
+                    } else if key == "pass" || key== "passwd" || key == "pword" || key == "pw" {
                         request_params.insert(key.to_string(), randomgenerator::generate_bollocks(8));
                     } else if key == "name" {
                         request_params.insert(key.to_string(), randomgenerator::generate_name());
@@ -157,7 +157,7 @@ fn process_page(url: &String, delay: i32, num: i32) {
                     } else if key == "name2" || key == "lastname" || key == "lname" || key == "last_name" || key == "surname" {
                         request_params.insert(key.to_string(), randomgenerator::get_random_lastname());
                     } else {
-                        request_params.insert(key.to_string(), randomgenerator::generate_bollocks(randomgenerator::generate_random()));
+                        request_params.insert(key.to_string(), randomgenerator::generate_bollocks(32));
                     }
                 } else {
                     // There was pre-existing data. Use that as not to arouse suspicion
@@ -169,7 +169,6 @@ fn process_page(url: &String, delay: i32, num: i32) {
             for (key, value) in &hidden_params {
                 request_params.insert(key.to_string(), value.to_string());
             }
-
             // Do the needful here to send the request
             let client = reqwest::blocking::Client::new();
             let res = client.post(&form_target_url)
